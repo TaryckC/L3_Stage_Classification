@@ -1,29 +1,21 @@
-#############################################################################
-# Code_name : main.py
-# Description : code principal
-    #- Accesseurs aux informations de la base de données MUTAG(noeuds, liens, attributs, graphes)
-    #- Méthode de création de graphes, sous graphe et affichage
-    #- Parser
-    #- [...]
-#Authors : Brandon Chien_Kan_Foon, Corentin Chien_Kan_Foon, Stanislas Corré
-#############################################################################
+# Dans ce fichier ce trouve :
+# - Accesseurs des fichiers
+# - ...
 
-
-### 
-# Imports
-###
+# IMPORTS :
 
 import networkx as nx
 import matplotlib.pyplot as plt
 import pandas as pd 
 from networkx.algorithms import isomorphism
 import random
+import multiprocessing as mp
 import time
 
-###
+# FIN IMPORTS -------------------------
 
-###
-# Attributs
+
+# ATTRIBUTS :
 
 edges_filename = 'mutag_data/MUTAG_A.txt'
 edgesLabels_filename = 'mutag_data/MUTAG_edge_labels.txt'
@@ -31,14 +23,13 @@ graphInds_filename = 'mutag_data/MUTAG_graph_indicator.txt'
 graphsLabels_filename = 'mutag_data/MUTAG_graph_labels.txt'
 nodesLabels_filename = 'mutag_data/MUTAG_node_labels.txt'
 
-###
+# FIN ATTRIBUTS ------------------------------
 
-###
 
-# Début des méthodes
+# -------------------------------------- DEBUT METHODES :
 
-    #- Accesseurs aux informations de la base de données MUTAG(noeuds, liens, attributs, graphes)
 
+# ACCESSEURS DES FICHIERS :
 
 # Fonction get_NodesLabels :
     # Récupère dans le fichier DS_node_labels.txt la liste des labels des noeuds et la renvoie
@@ -83,10 +74,10 @@ def get_GraphLabels(file_name):
             break
         else:
             graphLabels_list.append(int(line_content))
-    return graphLabels_list 
+    return graphLabels_list
 
 # Fonction get_GraphIndicator :
-    # Récupère dans le fichier DS_graph_indicator.txt la liste qui associe le noeud à d'index i au graph auquel il appartien
+    # Récupère dans le fichier DS_graph_indicator.txt la liste qui associe le noeud à l'index i au graph auquel il appartient
     # WARNING : Indicator 1 a pour index 0 dans cette liste
 def get_GraphIndicator(file_name):
     file_object = open(file_name, 'r')
@@ -115,6 +106,10 @@ def get_Edges(file_name):
             temp_list = list(map(int,line_content.split())) #Conversion de [string,string] à [int,int]
             edges_list.append(temp_list)
     return edges_list
+
+# FIN ACCESSEURS DES FICHIERS ------------------------
+
+# CREATION DE STRUCTURES DE DONNEES ------------------------------
 
 # Fonction list_Edges&Labels:
     # Crée la liste : [("noeud","noeud"), "label"]
@@ -164,6 +159,8 @@ def edgelist_to_label(edges_list,edges_filename, edgesLabels_filename):
                 list.append(j[1])
     return list
 
+# ACCESSEURS :
+
 # Fonction get_NodesByLabel
     #Renvoies la liste des noeuds correspondant au label demandé dans G
 def get_NodesByLabel(G,label):
@@ -184,36 +181,25 @@ def get_EdgesByLabel(G,label):
             list.append((i[0],(i[1])))
     return list
 
+# FIN CREATION DE STRUCTURES DE DONNEES --------------------------
 
-###
+# METHODES GRAPHES :
 
-#- Méthode de création de graphes, sous-graphes, table de contingence et affichage
-
-    # Fonction create_Graph : 
-        #Crée et renvoie un graph de classe x en fonction d'une liste de noeuds et de liens
-        # Rappel des types de noeuds : 
-        # 0->C 1->N 2->O 3->F 4->I 5->Cl 6->Br
+# Fonction create_Graph : 
+    #Crée et renvoie un graph de classe x en fonction d'une liste de noeuds et de liens
+    # Rappel des types de noeuds : 
+    # 0->C 1->N 2->O 3->F 4->I 5->Cl 6->Br
+ #version 2
 def create_Graph(nodes_list,edges_list,global_labels_list_node,global_labels_list_edge,edges_filename, edgesLabels_filename):
     G = nx.Graph()
     nodeslbls_list = node_to_Label(nodes_list,global_labels_list_node)
-    for i in range(0,len(nodes_list)):
-        G.add_node(nodes_list[i], atome=nodeslbls_list[i])
-
     edgeslbls_list = edgelist_to_label(edges_list,edges_filename, edgesLabels_filename)
-    for i in range(0, len(edges_list)):
-        G.add_edge(edges_list[i][0],edges_list[i][1], label=str(edgeslbls_list[i]))
     
+    
+    G.add_nodes_from((nodes_list[i], {'atome': nodeslbls_list[i]}) for i in range(len(nodes_list)))
+
+    G.add_edges_from((edges_list[i][0], edges_list[i][1], {'label': str(edgeslbls_list[i])}) for i in range(len(edges_list)))
     return G
-
-
-# Fonction ensemble
-    # Renvoie une liste avec aucun doublon
-def ensemble(l):
-    res = list()
-    for e in l:
-        if not e in res:
-            res.append(e)
-    return res
 
 # Fonction get_GraphClass
     # Renvoie le nombre de graphe total et la liste des tuples (classe, nb apparition)
@@ -230,25 +216,7 @@ def get_GraphClass(graphsLabels_file):
                 classR[c][1] += 1
                 break
     return len(graphlabelslist), classR
-
-# Fonction qui créer une table de contingence grâce au module Pandas
-    # Renvoie une table de contingence
-def get_ContingenceTable(fsgC1, fsgC2, totAppSg, noFsgC1, noFsgC2, totNAppSg):
-    Ctge_Table = [
-    [fsgC1, fsgC2, totAppSg],
-    [noFsgC1, noFsgC2, totNAppSg ], 
-    [e[1] for e in get_GraphClass(graphsLabels_filename)[1]]+[get_GraphClass(graphsLabels_filename)[0]]]
-
-    Ctge_Table_df = pd.DataFrame(Ctge_Table,
-                                index=['Sg','~Sg', ''],
-                                columns=['Graphe ({})'.format(e[0]) for e in get_GraphClass(graphsLabels_filename)[1]] 
-                                        + ['Total Apparition'])
-    
-    return Ctge_Table_df
-
-# Fonction qui retourne une table de règles de classification
-#def get_ClassRulesTable(rulesList, freqList, confList, AmeList):
-
+#Du coup ça renvoie (Liste de tous les graphes et leurs classe associé, l'ensemble des classes et leurs effectifs)
 
 # Fonction display_Graph
     # Affiche le graphe choisi
@@ -258,8 +226,6 @@ def display_Graph(graph):
   else:
     G = graph
   pos=nx.spring_layout(G)
-  print("Noeuds graph :" + str(G.nodes))
-  print("Liens graph :" + str(G.edges))
 
   #Coloration des noeuds
 
@@ -335,79 +301,11 @@ def display_Graph(graph):
 
   plt.axis('off')
   plt.show() #visualisation pas possible sur repl
-###
-
-#- Parser
-
-# Fonction qui , pour chaque graphe créé, compare si le sous graphe 'subgraph' choisi correspond à l'ensemble des graphes 'nbgraph' de la base de données sous forme de liste
-    # Renvoie la liste des graphes isomorphique à un sous graphe choisi, temps d'éxécution du code
-# def compare(nb_graph,subgraph):
-#     start_time = time.time()
-#     list = []
-#     county=0
-#     fsgC1, fsgC2, totAppSg = 0, 0, 0
-#     noFsgC1, noFsgC2, totNAppSg = 0, 0, 0
-#     cfC1, cfC2 = 0, 0
-#     fqC1, fqC2 = 0, 0
-#     amlC1, amlC2 = 0, 0
-#     print("Liste des résultats  : ('id_graph','Sous-graphe isomorphique ? Y/N')")
-#     for i in range(1,nb_graph+1):
-
-#         G = create_Graph(get_GraphNodes(i,get_GraphIndicator(graphInds_filename)),get_GraphEdges(get_GraphNodes(i,get_GraphIndicator(graphInds_filename)),edges_filename),get_NodesLabels(nodesLabels_filename),get_EdgesLabels(edgesLabels_filename),edges_filename, edgesLabels_filename) # Créer un graphe 
-#         GM = isomorphism.GraphMatcher(G,subgraph,node_match= lambda n1,n2 : n1['atome']==n2['atome'], edge_match= lambda e1,e2: e1['label'] == e2['label']) # GM = GraphMatcher
-#         if GM.subgraph_is_isomorphic(): # Retourne un booléen si le sougraphe est isomorphe
-#             list.append((i,'Oui'))
-#             county+=1 
-            
-#             if get_GraphLabels(graphsLabels_filename)[i] == 1:
-#                 fsgC1+=1
-#             else:
-#                 fsgC2+=1
-                
-#         else:
-#             list.append((i,"Non"))
-#     list.append(("yes :", county))
-#     list.append(("no :", nb_graph-county))
-
-#     end_time = time.time()
-#     # ~sg
-#     noFsgC1 = get_GraphClass()[0]-fsgC1
-#     noFsgC2 = get_GraphClass()[1]-fsgC2
-#     totAppSg = fsgC1+fsgC2
-#     totNAppSg = noFsgC1+noFsgC2
-
-#     #Confiance/Fréquence/Amélioration/crossrate
-#     fqC1 = fsgC1 / get_GraphClass()[2]
-#     fqC2 = fsgC2 / get_GraphClass()[2]
-
-#     cfC1 = fqC1 / ((fsgC1+fsgC2)/get_GraphClass()[2])
-#     cfC2 = fqC2 / ((fsgC1+fsgC2)/get_GraphClass()[2])
-
-#     amlC1 = cfC1 / ((get_GraphClass()[0]/get_GraphClass()[2]))
-#     amlC2 = cfC1 / (get_GraphClass()[1]/get_GraphClass()[2])
-
-#     growthR = (fqC1/get_GraphClass()[0]) / (fqC2/get_GraphClass()[1])
-    
 
 
-#     #############################
-#     # Table de contingence fictive, à modifier si nécessaire
-#     ct = get_ContingenceTable(fsgC1, fsgC2, totAppSg, noFsgC1, noFsgC2, totNAppSg)
-#     print(ct)
-#     print('/n')
-#     #print("Confiance du SG dans la classe C1" + fsgC1/get_GraphClass()[0])
-#     print('/n')
-#     #print("Confiance du SG dans la classe C2" + fsgC2/get_GraphClass()[1])
-#     print('/n')
-#     #############################
-    
-#     return list,"Temps éxécution : " + str(end_time-start_time) + "seconde(s)"
-#     # , "confianceC1 : " + str(cfC1), " confianceC2 : " + str(cfC2), " frequenceC1 : " + str(fqC1), " frequenceC2 : " + str(fqC2)," ameliorationC1 : " + str(amlC1), " ameliorationC2 : " + str(amlC2), " growth : " + str(growthR)
-# ###
 
-
-#################
 # Fonction qui va extraire un sous-graphe aléatoire dans le graphe donné
+
 def SgExtractor(graph_id, nodesLabels_filename, edgesLabels_filename, edges_filename,graphInds_filename):
     #Liste des noeuds et liens du sous-graphe
     nodes = []
@@ -455,7 +353,8 @@ def SgExtractor(graph_id, nodesLabels_filename, edgesLabels_filename, edges_file
     sg = create_Graph(nodes,edges,get_NodesLabels(nodesLabels_filename),get_EdgesLabels(edgesLabels_filename),edges_filename, edgesLabels_filename)
     return sg
 
-########################
+# FONCTION DE DECOUPAGE DE LA BASE (??? J'ai pas trop compris ça ???):
+
 ## Fonction qui coupe la base en deux tout en gardant les proportions de classe à 1 élément près
     # Retourne un tuples contenant deux listes contenant elles même des id de graphe
     # Chacune des deux listes reprèsente respectivement les bases train et test 
@@ -478,6 +377,7 @@ def cutBase(graphsLabels_filename):
         for j in range(len(gco)):
             if listeClasses[i] == gco[j][0]:
                 if ic[j] < nbc[j]/2:
+                    #on verifie ici si il y a pas plus de la moitié des individus d'une classe dans une liste.
                     ic[j] += 1
                     l1.append(i+1) #car les id des graphe commencent à 1
                 else:
@@ -489,7 +389,9 @@ def cutBase(graphsLabels_filename):
 
     return (l1, l2), (end_time-start_time)
 
-#### Fonction qui compte le nombre d'element dans chaque classe pour une sous base donnée
+# FIN FONCTION DE DECOUPAGE DE BASE -----------------------------------------
+
+# Fonction qui compte le nombre d'element dans chaque classe pour une sous base donnée
     # input : list<int>, liste des id des graphes de la sous base
     # output : int,int, respectivement, le nombre d'élément de classe 1 et -1 dans la sousbase
 def countClassByListId(list_id, graphsLabels_file):
@@ -504,19 +406,19 @@ def countClassByListId(list_id, graphsLabels_file):
                 break
     return res
 
-#####
-
-#####
 # Fonction qui va donner une prediction pour un sous graphe accompagné de la confiance et du growthrate
-  #input : 
+    #input : 
 def noyeauPrediction(sousBase, subgraph, graphsLabels_filename):
     gc = get_GraphClass(graphsLabels_filename)
     start_time = time.time()
     county=0
+    # liste stockant le nb d'apparition du sous-graphe pour chaque classe de graphe
     fsg = [0 for i in gc[1]]
     # fsgC1, fsgC2, totAppSg = 0, 0, 0
+    # Cette liste représente le nombre de non-apparitions du sous-graphepour chaque classe de graphe.
     noFsg = [0 for i in gc[1]]
     # noFsgC1, noFsgC2, totNAppSg = 0, 0, 0
+    #  Cette liste représente la confiance associée à la prédiction du sous-graphepour chaque classe de graphe
     cf = [0 for i in gc[1]]
     # cfC1, cfC2 = 0, 0
     fq = [0 for i in gc[1]]
@@ -537,8 +439,10 @@ def noyeauPrediction(sousBase, subgraph, graphsLabels_filename):
             
             for j in range(len(gc[1])):
                 if get_GraphLabels(graphsLabels_filename)[i-1] == gc[1][j][0]:
+                    #Donc enfaite ce serait plutôt le nombre de matchs entre ce sous-graphe et les graphes de la base pour cette classe
                     fsg[j] += 1
                     break
+            #Si le sous graphe est dans un graphe de class j, alors on incrémente le nombre d'apparition de ce sous graphe dans cette classe.
 
     # ~sg
     for i in range(len(fsg)):
@@ -586,9 +490,7 @@ def noyeauPrediction(sousBase, subgraph, graphsLabels_filename):
     
     return end_time-start_time, predict, rcf, rgrowthR
 
-
-
-#### Fonction qui essai de classifier un graphe de la base test grace a la base train
+# Fonction qui essai de classifier un graphe de la base test grace a la base train
     # input : graph_id, id du graph a predire
     #          n nombre de sous-graphe à tester dans le graphe
     # output : (int,int), classe prédit du graphe -1 ou 1 & classe réel du graphe
@@ -598,7 +500,6 @@ def predicateur(graph_id, n, sousBaseTrain, minCf, minGrowth):
     gco = get_GraphClass(graphsLabels_filename)[1]
     listRes = []
     for i in range(n):
-        print("numero sous graphe : " + str(i))
         k = SgExtractor(graph_id, nodesLabels_filename, edgesLabels_filename, edges_filename,graphInds_filename)
         
         # predict prend comme valeur la classe supposé du graphe
@@ -607,29 +508,17 @@ def predicateur(graph_id, n, sousBaseTrain, minCf, minGrowth):
 
         #Determine si k est utile/pertinant pour la prediction
         #if fruit == 'Apple' : isApple = True
-        print("predict =")
-        print(predict)
-        print(growthR)
-        if cf > minCf and growthR >= minGrowth : 
+
+        if cf > minCf and growthR >= minGrowth :
           listRes.append(predict)
         
     # nb de prediction respectivement pour chaque classe
     nbpc = [0 for i in gco]
-    #print(gco)
-    
-    # for c in listRes:
-      #c1 = c1 + 1 if c == 1 else c2 = c2 + 1
-      #print("c : " + str(c))
-    #   if c == 1:
-    #     c1 += 1
-    #   else:
-    #     c2 += 1
-    #print(listRes)
     for i in range(len(nbpc)):
         nbpc[i] = listRes.count(gco[i][0])
 
-    #print("{} == {} = {}".format(nbpc, list(ensemble(nbpc)),nbpc == list(ensemble(nbpc)) ))
     if nbpc == list(ensemble(nbpc)):
+        #Si toutes les classes ont un nombre différents de prédictions, alors il n'y a ambiguïté et donc on peut déterminer la classe dominante et donc prédire un résultat.
         predId = nbpc.index(max(nbpc))
         prediction = gco[predId][0]
     else:
@@ -642,115 +531,102 @@ def predicateur(graph_id, n, sousBaseTrain, minCf, minGrowth):
     tot_time = end_time-start_time
     return (prediction, get_GraphIndicator(graphsLabels_filename)[graph_id-1]), int(tot_time+time_exec)
 
-# Tests
+# FIN GRAPHES ------------------------------------------------
 
-#- TESTS
+# FONCTION DE MANIPULATION DE STRUCTURE DE DONNEES :
 
+# Fonction ensemble
+    # Renvoie une liste avec aucun doublon
+def ensemble(l):
+    res = list()
+    for e in l:
+        if not e in res:
+            res.append(e)
+    return res
 
-#- Test du prédicateur
+# FIN FONCTION DE MANIPULATION DE STRUCTURES DE DONNEES
 
-ntm, ntp = cutBase(graphsLabels_filename)[0]
-print("Taille ntp : "+ str(len(ntp)))
-print(cutBase(graphsLabels_filename)[1])
-testOk = 0
-testNOk = 0
-testZ = 0
-tf = 0
-for i in range (0,len(ntp)):
-    print("Graphe num :"+str(i))
-    r,t= predicateur(ntp[i], 10, ntm, 0.6, 2)#10 
-    tf += t
-    print(" Classe Dominante : " + str(r[0]) + " Classe Graphe : " + str(r[1]) + " Temps : " + str(t))
-    if r[0] == r[1]:
-      testOk += 1
-    elif r[0] == 0:
-      testZ += 1
-    else:
-      testNOk += 1
-    print(testOk, testNOk, testZ)
-print("% précision : " + str((testOk/(testNOk+testOk+testZ))*100))
-print("Temps total : " + str(tf))
+# FONCTION DE GENERATION DE TABLE DE CONTINGENCE :
 
+# Fonction qui créer une table de contingence grâce au module Pandas
+    # Renvoie une table de contingence
+def get_ContingenceTable(fsgC1, fsgC2, totAppSg, noFsgC1, noFsgC2, totNAppSg):
+    Ctge_Table = [
+    [fsgC1, fsgC2, totAppSg],
+    [noFsgC1, noFsgC2, totNAppSg ], 
+    [e[1] for e in get_GraphClass(graphsLabels_filename)[1]]+[get_GraphClass(graphsLabels_filename)[0]]]
 
+    Ctge_Table_df = pd.DataFrame(Ctge_Table,
+                                index=['Sg','~Sg', ''],
+                                columns=['Graphe ({})'.format(e[0]) for e in get_GraphClass(graphsLabels_filename)[1]] 
+                                        + ['Total Apparition'])
+    
+    return Ctge_Table_df
 
+# Fonction de découpage de list :
 
+def splitlist(alist, wanted_parts=1):
+    length = len(alist)
+    return [ alist[i*length // wanted_parts: (i+1)*length // wanted_parts] 
+             for i in range(wanted_parts) ]
 
+# fonction d'éxécution du programme Main :
+def prediction_loop(ntm, ntp, res) :
+    testOk = 0
+    testNOk = 0
+    testZ = 0
+    for i in range (0,len(ntp)):
+        r,t= predicateur(ntp[i], 20, ntm, 0.7, 2)#10 
+        if r[0] == r[1]:
+            testOk += 1
+        elif r[0] == 0:
+            testZ += 1
+        else:
+            testNOk += 1
+    res.put((testOk, testNOk, testZ))
 
-#- Test de l'extracteur de sous_graphes avec dix sous_graphes aléatoires
+# Créations des différents processus :
+# -- # Boucle d'exécution du des processus :
 
+list_process = list()
 
-# start_time = time.time()
-# for i in range(0,10):
-#     sb = SgExtractor(1, nodesLabels_filename, edgesLabels_filename, edges_filename,graphInds_filename)
-#     print('\n Table ' + str(i+1) + ":")
-#     compare(188,sb)
-#     print("\n")
-#     print("Noeuds : \n" + str(sb.nodes.data()))
-#     print("\n")
-#     print("Liens: \n " + str(sb.edges.data()))
-# end_time = time.time()
-# print("Temps éxécution : " + str(end_time-start_time) + "seconde(s)")
+def main(graphsLabels_filename, number=1) :
 
+    ntm, ntp = cutBase(graphsLabels_filename)[0]
+    print("Taille ntp : "+ str(len(ntp)))
+    print(cutBase(graphsLabels_filename)[1])
+    start = time.time()
 
+    # Découpage en 4 de ntp :
+    new_ntp = splitlist(ntp, number)
 
-#- Test avec le sous-graphe cyclique ("1")---("2")---("3")---("4")---("5")---("6"):
-# subgraph_nodes = ["1","2","3","4","5","6"]
-# subgraph_edges = [("1","2"), ("1", "6"), ("2","3"),("3","4"), ("4", "5"), ("5","6")]
-# subgraph_test = create_Graph(subgraph_nodes,subgraph_edges,get_NodesLabels(nodesLabels_filename),get_EdgesLabels(edgesLabels_filename),edges_filename, edgesLabels_filename)
-# print('\n')
-# print(subgraph_test.edges.data())
-# print(get_EdgesByLabel(subgraph_test,0))
-# print(compare(188, subgraph_test))
+    # Exécution principale eventuellement en multi-processing
+    if __name__ == '__main__':
+        res = mp.Queue()
+        processes = list()
+        resultats = list()
+        for i in range(number):
+            processes.append(mp.Process(target=prediction_loop, args=(ntm, new_ntp[i], res)))
+            processes[i].start()
+            print("Processus", i+1, "a commencé")
 
-#####
+        for i in range(number):
+            processes[i].join()
 
+        for i in range(number):
+            resultats.append(res.get())
 
-#- tests d'affichages
-# display_Graph(180)
-# display_subGraph(subgraph_test)
+        testOk = 0
+        testNOk = 0
+        testZ = 0
+        for i in range(number):
+            testOk += resultats[i][0]
+            testNOk += resultats[i][1]
+            testZ += resultats[i][2]
 
-#Graphe 150
-#display_Graph(150)
+        print("% précision : " + str((testOk/(testNOk+testOk+testZ))*100))
+        print("Temps total : " + str(time.time()-start))
 
-##############
-
-# Autres tests
-
-# subgraph_nodes = ["3353","3354","3355"]
-# subgraph_edges = [("3353","3354"), ("3353","3355")]
-# subgraph_test = create_Graph(subgraph_nodes,subgraph_edges,get_NodesLabels(nodesLabels_filename),get_EdgesLabels(edgesLabels_filename),edges_filename, edgesLabels_filename)
-# print('\n')
-# print(subgraph_test.nodes.data())
-# print(compare(188, subgraph_test))
-
-##############
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# ZONE DE TEST :
+    
+main(graphsLabels_filename, 4)
