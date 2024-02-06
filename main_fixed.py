@@ -14,7 +14,6 @@ import time
 
 # FIN IMPORTS -------------------------
 
-
 # ATTRIBUTS :
 
 edges_filename = 'mutag_data/MUTAG_A.txt'
@@ -306,7 +305,8 @@ def display_Graph(graph):
 
 # Fonction qui va extraire un sous-graphe aléatoire dans le graphe donné
 
-def SgExtractor(graph_id, nodesLabels_filename, edgesLabels_filename, edges_filename,graphInds_filename):
+def SgExtractor(graph_id, nodesLabels_filename, edgesLabels_filename, edges_filename, graphInds_filename, nbNoeudsListe):
+
     #Liste des noeuds et liens du sous-graphe
     nodes = []
     edges = []
@@ -317,6 +317,7 @@ def SgExtractor(graph_id, nodesLabels_filename, edgesLabels_filename, edges_file
     # Taille du sous-graphe choisi aleatoirement 
     # entre 1 et le nb de noeud du graphe
     SgLen = random.randint(1, len(nodeList))
+    nbNoeudsListe.append(SgLen+nbNoeudsListe[len(nbNoeudsListe)-1])
 
     # Noeud d'où debutera la construction du sous-graphe
     firstNode = random.choice(nodeList)
@@ -408,9 +409,9 @@ def countClassByListId(list_id, graphsLabels_file):
 
 # Fonction qui va donner une prediction pour un sous graphe accompagné de la confiance et du growthrate
     #input : 
-def noyeauPrediction(sousBase, subgraph, graphsLabels_filename):
+def noyeauPrediction(sousBase, subgraph, graphsLabels_filename, graphMatch, tempsGraphMatch, graphNonMatch, tempsGraphNonMatch):
+
     gc = get_GraphClass(graphsLabels_filename)
-    start_time = time.time()
     county=0
     # liste stockant le nb d'apparition du sous-graphe pour chaque classe de graphe
     fsg = [0 for i in gc[1]]
@@ -428,12 +429,11 @@ def noyeauPrediction(sousBase, subgraph, graphsLabels_filename):
     nbc = len(sousBase)
     
     for i in sousBase:
-
+        start_time = time.time()
         G = create_Graph(get_GraphNodes(i,get_GraphIndicator(graphInds_filename)),get_GraphEdges(get_GraphNodes(i,get_GraphIndicator(graphInds_filename)),edges_filename),get_NodesLabels(nodesLabels_filename),get_EdgesLabels(edgesLabels_filename),edges_filename, edgesLabels_filename) # Créer un graphe 
         
         GM = isomorphism.GraphMatcher(G,subgraph,node_match= lambda n1,n2 : n1['atome']==n2['atome'], edge_match= lambda e1,e2: e1['label'] == e2['label']) # GM = GraphMatcher
         if GM.subgraph_is_isomorphic(): # Retourne un booléen si le sougraphe est isomorphe
-            
             # value_when_true if condition else value_when_false
             # (fsgC1 = fsgC1 + 1) if get_GraphLabels(graphsLabels_filename)[i-1]==1 else (fsgC2 = fsgC2 + 1)
             
@@ -443,6 +443,13 @@ def noyeauPrediction(sousBase, subgraph, graphsLabels_filename):
                     fsg[j] += 1
                     break
             #Si le sous graphe est dans un graphe de class j, alors on incrémente le nombre d'apparition de ce sous graphe dans cette classe.
+            indiceGraphMatch = len(graphMatch)-1
+            graphMatch.append(graphMatch[indiceGraphMatch]+1)
+            tempsGraphMatch.append(tempsGraphMatch[indiceGraphMatch]+(time.time()-start_time))
+        else :
+            indiceGraphNonMatch = len(graphNonMatch)-1
+            graphNonMatch.append(graphNonMatch[indiceGraphNonMatch]+1)
+            tempsGraphNonMatch.append(tempsGraphNonMatch[indiceGraphNonMatch]+(time.time()-start_time))
 
     # ~sg
     for i in range(len(fsg)):
@@ -478,7 +485,7 @@ def noyeauPrediction(sousBase, subgraph, graphsLabels_filename):
     # else:
     #   growthR = 1000
 
-    #Prediction 
+    #Predictio
     maxId = fq.index(max(fq))
     predict = gc[1][maxId][0]
 
@@ -494,17 +501,22 @@ def noyeauPrediction(sousBase, subgraph, graphsLabels_filename):
     # input : graph_id, id du graph a predire
     #          n nombre de sous-graphe à tester dans le graphe
     # output : (int,int), classe prédit du graphe -1 ou 1 & classe réel du graphe
-def predicateur(graph_id, n, sousBaseTrain, minCf, minGrowth):
+def predicateur(graph_id, n, sousBaseTrain, minCf, minGrowth, nbNoeudsListe, listeTempsNoeuds, graphMatch, tempsGraphMatch, graphNonMatch, tempsGraphNonMatch):
     
     start_time = time.time()
     gco = get_GraphClass(graphsLabels_filename)[1]
     listRes = []
     for i in range(n):
-        k = SgExtractor(graph_id, nodesLabels_filename, edgesLabels_filename, edges_filename,graphInds_filename)
+        # Timer pour récupérer les données de la liste : listeTempsNoeuds
+        start = time.time()
+        k = SgExtractor(graph_id, nodesLabels_filename, edgesLabels_filename, edges_filename, graphInds_filename, nbNoeudsListe)
         
         # predict prend comme valeur la classe supposé du graphe
         #Calcule les mesures confiance etc
-        time_exec, predict, cf, growthR = noyeauPrediction(sousBaseTrain, k, graphsLabels_filename)
+        time_exec, predict, cf, growthR = noyeauPrediction(sousBaseTrain, k, graphsLabels_filename, graphMatch, tempsGraphMatch, graphNonMatch, tempsGraphNonMatch)
+
+        listeTempsNoeuds.append(time.time()-start+listeTempsNoeuds[len(listeTempsNoeuds)-1])
+
 
         #Determine si k est utile/pertinant pour la prediction
         #if fruit == 'Apple' : isApple = True
@@ -529,6 +541,7 @@ def predicateur(graph_id, n, sousBaseTrain, minCf, minGrowth):
 
     end_time = time.time()
     tot_time = end_time-start_time
+
     return (prediction, get_GraphIndicator(graphsLabels_filename)[graph_id-1]), int(tot_time+time_exec)
 
 # FIN GRAPHES ------------------------------------------------
@@ -572,18 +585,38 @@ def splitlist(alist, wanted_parts=1):
 
 # fonction d'éxécution du programme Main :
 def prediction_loop(ntm, ntp, res) :
+    # Variable pour la création des graphiques :
+
+    nbNoeudsListe = [0]
+    nbGrapheListe = [0]
+    listeTempsNoeuds = [0]
+
+    graphMatch = [0]
+    tempsGraphMatch = [0]
+    graphNonMatch = [0]
+    tempsGraphNonMatch = [0]
+
     testOk = 0
     testNOk = 0
     testZ = 0
     for i in range (0,len(ntp)):
-        r,t= predicateur(ntp[i], 20, ntm, 0.7, 2)#10 
+        nbGrapheListe.append(1)
+        r,t= predicateur(ntp[i], 20, ntm, 0.7, 2, nbNoeudsListe, listeTempsNoeuds, graphMatch, tempsGraphMatch, graphNonMatch, tempsGraphNonMatch)#10 
         if r[0] == r[1]:
             testOk += 1
         elif r[0] == 0:
             testZ += 1
         else:
             testNOk += 1
+    
     res.put((testOk, testNOk, testZ))
+
+    print(graphMatch)
+    print("########################################################################")
+    print(tempsGraphMatch)
+
+
+    trace(nbNoeudsListe, graphMatch, graphNonMatch, listeTempsNoeuds, tempsGraphMatch, tempsGraphNonMatch)
 
 # Créations des différents processus :
 # -- # Boucle d'exécution du des processus :
@@ -626,6 +659,43 @@ def main(graphsLabels_filename, number=1) :
 
         print("% précision : " + str((testOk/(testNOk+testOk+testZ))*100))
         print("Temps total : " + str(time.time()-start))
+
+# Méthode d'affichage des graphes :
+
+# fonction de tracé
+def trace(x1, x2, x3, temps_exec1, temps_exec2, temps_exec3): 
+    # en admettant que l'on ait 3 jolies listes 
+
+    # nb_noeuds
+    # nb_graphes
+    # time_exec
+
+    # Premier graphique
+    plt.figure(figsize=(8, 6))  # Crée une nouvelle figure
+    plt.plot(x1, temps_exec1, label="nombre de noeud de chaque graph étudié", color='blue')  
+    plt.title("Evolution du nombre de graphes en fonction du temps")
+    plt.xlabel("temps d'execution") 
+    plt.grid(True)
+    plt.legend()  # Ajout d'une légende basée sur les labels fournis lors du tracé
+
+    # Deuxième graphique
+    plt.figure(figsize=(8, 6))  # Crée une nouvelle figure
+    plt.plot(x2, temps_exec2, label="isomorphisme trouvée", color='red')  
+    plt.title("Nb d'isomorphisme trouvé en fonction du temps")
+    plt.xlabel("temps d'execution") 
+    plt.grid(True)
+    plt.legend()  # Ajout d'une légende basée sur les labels fournis lors du tracé
+
+    # Troisième graphique
+    plt.figure(figsize=(8, 6))  # Crée une nouvelle figure
+    plt.plot(x3, temps_exec3, label="isomorphisme non trouvée", color='green')  
+    plt.title("Nb d'isomorphisme non trouvé en fonction du temps")
+    plt.xlabel("temps d'execution") 
+    plt.grid(True)
+    plt.legend()  # Ajout d'une légende basée sur les labels fournis lors du tracé
+
+    plt.show()
+
 
 # ZONE DE TEST :
     
